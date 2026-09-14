@@ -1,89 +1,39 @@
-"""Remove bordas externas das paginas de questoes.
+"""
+Propósito: remover as bordas externas das páginas
+Autor: Alexandre Nassar de Peder
+Criação: 02/10/2025
+Atualização: 03/06/2026
 
-Autor da adaptacao: Raul
-Baseado no fluxo desenvolvido por Alexandre Nassar de Peder.
+OBS1: puxe a pasta "imagens-convertidas" do passo 1 para essa pasta do passo 2
+
+OBS2: abra a imagem no GIMP e conte pixels para saber quanto de borda tem que cortar.
+
+OBS3: atualize a linha 33 com os valores corretos de corte (esquerda, superior, direita, inferior)
+
+OBS4: tenha em mente desde já que você vai usar as imagens futuramente, então corte pensando na melhor maneira para executar todos os 12 passos
+
+OBS5: execute o código, e abra as imagens para conferir se as bordas foram removidas corretamente. Se não, ajuste os valores de corte e execute novamente.
 """
 
-from __future__ import annotations
+from PIL import Image
+import os
 
-import sys
-from pathlib import Path
+pasta_imagens = "imagens-convertidas"
+pasta_saida = "sem-bordas-externas"
 
-RAIZ = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(RAIZ))
+os.makedirs(pasta_saida, exist_ok=True)
 
-from config import (
-    LINHA_AGRUPAMENTO_DISTANCIA,
-    LINHA_ESCURA_MAX_RGB,
-    LINHA_HORIZONTAL_ALTURA_MIN,
-    LINHA_HORIZONTAL_PROP_MIN,
-    MARGEM_CORTE_INFERIOR,
-    MARGEM_CORTE_SUPERIOR,
-    MARGEM_LATERAL_EXTRA,
-    MARGEM_LATERAL_PADRAO,
-    PAGINAS_QUESTOES,
-    PASTAS,
-)
-from utilitarios.comum import abrir_rgb, caminho_relativo, limpar_pasta, listar_pngs, numero_pagina
+for nome_arquivo in os.listdir(pasta_imagens):
+    if nome_arquivo.lower().endswith(".png"):
+        caminho_entrada = os.path.join(pasta_imagens, nome_arquivo)
+        imagem = Image.open(caminho_entrada)
 
+        largura, altura = imagem.size
 
-def linhas_horizontais(img):
-    """Detecta grupos de linhas horizontais escuras e longas."""
-    largura, altura = img.size
-    pix = img.load()
-    candidatas = []
-    for y in range(0, altura):
-        escuros = 0
-        for x in range(80, largura - 80, 3):
-            r, g, b = pix[x, y]
-            if max(r, g, b) <= LINHA_ESCURA_MAX_RGB:
-                escuros += 1
-        proporcao = escuros / max(1, ((largura - 160 + 2) // 3))
-        if proporcao >= LINHA_HORIZONTAL_PROP_MIN:
-            candidatas.append(y)
-    grupos = []
-    for y in candidatas:
-        if not grupos or y - grupos[-1][-1] > LINHA_AGRUPAMENTO_DISTANCIA:
-            grupos.append([y])
-        else:
-            grupos[-1].append(y)
-    return [(g[0], g[-1]) for g in grupos if len(g) >= LINHA_HORIZONTAL_ALTURA_MIN]
+        caixa_corte = (137, 352, largura - 134, altura - 183) # ATUALIZE AQUI OS VALORES DE CORTE (esquerda, superior, direita, inferior)
+        imagem_cortada = imagem.crop(caixa_corte)
 
+        caminho_saida = os.path.join(pasta_saida, nome_arquivo)
+        imagem_cortada.save(caminho_saida)
 
-def caixa_util(img):
-    """Calcula a caixa de recorte conservadora da area util."""
-    largura, altura = img.size
-    grupos = linhas_horizontais(img)
-    superiores = [g for g in grupos if g[0] < altura * 0.25]
-    inferiores = [g for g in grupos if g[0] > altura * 0.82]
-    topo = (superiores[-1][1] if superiores else 349) + MARGEM_CORTE_SUPERIOR
-    base = (inferiores[-1][0] if inferiores else altura - 180) + MARGEM_CORTE_INFERIOR
-    topo = max(0, min(topo, altura - 100))
-    base = max(topo + 100, min(base, altura))
-    esquerda = MARGEM_LATERAL_PADRAO - MARGEM_LATERAL_EXTRA
-    direita = largura - MARGEM_LATERAL_PADRAO + MARGEM_LATERAL_EXTRA
-    return (max(0, esquerda), topo, min(largura, direita), base)
-
-
-def main() -> None:
-    """Processa somente as paginas aproveitadas da prova."""
-    entrada = caminho_relativo(PASTAS["convertidas"])
-    saida = caminho_relativo(PASTAS["sem_bordas"])
-    limpar_pasta(saida, ("*.png",))
-    arquivos = [p for p in listar_pngs(entrada) if numero_pagina(p) in PAGINAS_QUESTOES]
-    if len(arquivos) != len(PAGINAS_QUESTOES):
-        raise RuntimeError(f"Esperadas {len(PAGINAS_QUESTOES)} paginas de questoes, encontradas {len(arquivos)}.")
-    for arquivo in arquivos:
-        img = abrir_rgb(arquivo)
-        caixa = caixa_util(img)
-        recorte = img.crop(caixa)
-        destino = saida / arquivo.name
-        recorte.save(destino)
-        print(f"{arquivo.name}: caixa {caixa} -> {recorte.width}x{recorte.height}px")
-        img.close()
-        recorte.close()
-    print(f"Bordas externas removidas: {len(arquivos)} paginas.")
-
-
-if __name__ == "__main__":
-    main()
+print("Recorte das bordas concluído.")
